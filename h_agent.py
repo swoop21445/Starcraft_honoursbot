@@ -11,8 +11,9 @@ from keras.layers import Dense, Input, Activation, Flatten, Conv2D, MaxPooling2D
 from keras.callbacks import TensorBoard
 from tensormod import ModifiedTensorBoard
 
-
-
+state_memory_size = 50_000
+min_mem_size = 20_000
+minibatch_size = 64
 
 class honoursAgent(base_agent.BaseAgent):
     def __init__(self):
@@ -20,6 +21,8 @@ class honoursAgent(base_agent.BaseAgent):
 
         self.action_space = []
         self.main_base = []
+
+        self.state_memory = []
 
         self.model = self.create_model()
 
@@ -135,4 +138,12 @@ class honoursAgent(base_agent.BaseAgent):
         merged_model.compile(loss="mse", optimizer="adam", metrics=["accuracy"])
         return merged_model
 
+    def train_model(self, state, step):
+        if len(self.state_memory) < min_mem_size:
+            return
 
+        minibatch = random.sample(self.state_memory, minibatch_size)
+
+        current_qs = self.model.predict(minibatch)
+
+        
