@@ -11,18 +11,14 @@ from keras.layers import Dense, Input, Activation, Flatten, Conv2D, MaxPooling2D
 from keras.callbacks import TensorBoard
 from tensormod import ModifiedTensorBoard
 
-state_memory_size = 50_000
-min_mem_size = 20_000
-minibatch_size = 64
+
+
 
 class honoursAgent(base_agent.BaseAgent):
     def __init__(self):
         super(honoursAgent, self).__init__()
 
-        self.action_space = []
         self.main_base = []
-
-        self.state_memory = []
 
         self.model = self.create_model()
 
@@ -34,12 +30,16 @@ class honoursAgent(base_agent.BaseAgent):
     def step(self, obs):
         super(honoursAgent, self).step(obs)
 
-        self.minerals = obs.observation.player.minerals
+        self.build_state(obs)
+
+        self.agent_units_map, self.enemy_unit_map = self.populate_map(obs)
 
         hatchery = self.get_units_by_type(obs,units.Zerg.Hatchery)
         if len(hatchery) > 0:
             self.main_base_left = (hatchery[0].x < 32)
-
+        
+        self.model.predict((self.state, self.agent_units_map))
+ 
         return random.choice([self.train_drone(obs), self.train_overlord(obs), self.build_pool(obs), self.train_zergling(obs), self.attack(obs)])
 
     def no_op(self,obs):
@@ -104,10 +104,47 @@ class honoursAgent(base_agent.BaseAgent):
             zergling = zerglings[np.argmax(distances)]
             return actions.RAW_FUNCTIONS.Attack_pt("now", zergling.tag, (target_location[0],target_location[1]))
         return actions.RAW_FUNCTIONS.no_op()
+    
+    def build_state(self, obs):
+        self.minerals = obs.observation.player.minerals
+        self.gas = obs.observation.player.vespene
+        self.supply = obs.observation.player.food_used
+        self.supply_cap = obs.observation.player.food_cap
+        self.army_supply = obs.observation.player.food_army
+        self.worker_supply = obs.observation.player.food_workers
+        self.idle_workers = obs.observation.player.idle_worker_count
+        self.larva_count = obs.observation.player.larva_count
+        self.state = (self.minerals, self.gas, self.supply, self.supply_cap, self.army_supply, self.worker_supply, self.idle_workers, self. larva_count)
+
+        self.state_len = ["minerals",
+                        "gas",
+                        "supply",
+                        "supply_cap",
+                        "army_supply",
+                        "worker_supply",
+                        "idle_workers",
+                        "larva_count"]
+
+        self.action_space = [self.train_drone(obs),
+                            self.no_op(obs),
+                            self.build_pool(obs),
+                            self.train_overlord(obs),
+                            self.train_zergling(obs)]
+
+
+    def populate_map(self,obs):
+        owned_unit_map = np.zeros(shape= (64,64))
+        enemy_unit_map = np.zeros(shape= (64,64))
+        for unit in obs.observation.raw_units:
+            if unit.alliance == features.PlayerRelative.SELF:
+                owned_unit_map[unit.x][unit.y] = 1
+            else:
+                enemy_unit_map[unit.x][unit.y] = 1
+        return owned_unit_map, enemy_unit_map
 
     def create_model(self):
         ## create NN model
-        nn_input = Input(shape=(64, 64))
+        nn_input = Input(shape=len(self.state_len))
         nn_layer1 = Dense(100, activation="relu")(nn_input)
         nn_layer2 = Dense(50, activation="relu", name="dense_end")(nn_layer1)
 
@@ -138,12 +175,4 @@ class honoursAgent(base_agent.BaseAgent):
         merged_model.compile(loss="mse", optimizer="adam", metrics=["accuracy"])
         return merged_model
 
-    def train_model(self, state, step):
-        if len(self.state_memory) < min_mem_size:
-            return
 
-        minibatch = random.sample(self.state_memory, minibatch_size)
-
-        current_qs = self.model.predict(minibatch)
-
-        
