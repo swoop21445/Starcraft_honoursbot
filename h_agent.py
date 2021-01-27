@@ -6,6 +6,8 @@ import random
 import time
 
 
+import tensorflow as tf
+
 from keras.layers.merge import concatenate
 from keras.models import Sequential, Model
 from keras.layers import Dense, Input, Activation, Flatten, Conv2D, MaxPooling2D, Conv1D, MaxPooling1D
@@ -55,7 +57,10 @@ class honoursAgent(base_agent.BaseAgent):
         if len(hatchery) > 0:
             self.main_base_left = (hatchery[0].x < 32)
         
-        choice = self.model.predict([self.state, (self.agent_units_map)])
+        ## model prediction
+        X = tf.random.normal((64,64,2))
+        y = tf.random.normal((8))
+        choice = self.model.predict([y, X])
  
         return random.choice([self.train_drone(obs), self.train_overlord(obs), self.build_pool(obs), self.train_zergling(obs), self.attack(obs)])
 
@@ -131,40 +136,44 @@ class honoursAgent(base_agent.BaseAgent):
         self.worker_supply = obs.observation.player.food_workers
         self.idle_workers = obs.observation.player.idle_worker_count
         self.larva_count = obs.observation.player.larva_count
-        self.state = (int(self.minerals), int(self.gas), int(self.supply), int(self.supply_cap), int(self.army_supply), int(self.worker_supply), int(self.idle_workers), int(self. larva_count))
+        self.state = (float(self.minerals), float(self.gas), float(self.supply), float(self.supply_cap), float(self.army_supply), float(self.worker_supply), float(self.idle_workers), float(self. larva_count))
         self.state = np.asarray(self.state)
 
 
     def populate_map(self,obs):
-        owned_unit_map = np.zeros(shape= (64,64))
-        enemy_unit_map = np.zeros(shape= (64,64))
+        unit_map = np.zeros(shape= (64, 64, 2))
         for unit in obs.observation.raw_units:
             if unit.alliance == features.PlayerRelative.SELF:
-                owned_unit_map[unit.x][unit.y] = 1
+                unit_map[unit.x][unit.y][0] = 1
             else:
-                enemy_unit_map[unit.x][unit.y] = 1
-        return owned_unit_map
+                unit_map[unit.x][unit.y][1] = 1
+        unit_map = unit_map.astype(np.float)
+        return unit_map
 
     def create_model(self):
         ## create NN model
-        nn_input = Input(shape=(self.nn_input_shape,))
+        ##numerical state input
+        nn_input = Input(shape=(self.nn_input_shape))
+
         nn_layer1 = Dense(100, activation="relu")(nn_input)
         nn_layer2 = Dense(50, activation="relu", name="dense_end")(nn_layer1)
 
         nn_flatten = Flatten()(nn_layer2)
 
         ## create Conv model
-        conv_input = Input(shape=(64, 64))
-        conv_layer_input = Conv1D(64, 3, activation="relu")(conv_input)
-        conv_layer_input_pool = MaxPooling1D(pool_size= 3)(conv_layer_input)
+        ## map input
+        conv_input = Input(shape=(64, 64, 2))
 
-        conv_layer1 = Conv1D(64, 3, activation="relu")(conv_layer_input_pool)
-        conv_layer1_pool = MaxPooling1D(pool_size=3)(conv_layer1)
+        conv_layer_1 = Conv2D(64, (3,3), activation="relu")(conv_input)
+        conv_pool_1 = MaxPooling2D(pool_size= (3,3))(conv_layer_1)
 
-        conv_layer2 = Conv1D(64, 3, activation="relu")(conv_layer1_pool)
-        conv_layer2_pool = MaxPooling1D(pool_size=3, name="conv_end")(conv_layer2)
+        conv_layer2 = Conv2D(64, (3,3), activation="relu")(conv_pool_1)
+        conv_layer2_pool = MaxPooling2D(pool_size=(3,3))(conv_layer2)
 
-        conv_flatten = Flatten()(conv_layer2_pool)
+        conv_layer3 = Conv2D(64, (3,3), activation="relu")(conv_layer2_pool)
+        conv_layer3_pool = MaxPooling2D(pool_size=(3,3), name="conv_end")(conv_layer3)
+
+        conv_flatten = Flatten()(conv_layer3_pool)
 
         ## merge models
         concatenated = concatenate([nn_flatten, conv_flatten])
@@ -176,6 +185,8 @@ class honoursAgent(base_agent.BaseAgent):
         ##model construction + compile
         merged_model = Model([nn_input, conv_input], out)
         merged_model.compile(loss="mse", optimizer="adam", metrics=["accuracy"])
+
+        merged_model.summary()
 
         return merged_model
 
