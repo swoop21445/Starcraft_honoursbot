@@ -58,10 +58,10 @@ class honoursAgent(base_agent.BaseAgent):
             self.main_base_left = (hatchery[0].x < 32)
         
         ## model prediction
-        X = tf.random.normal((64,64,2))
-        y = tf.random.normal((8))
-        choice = self.model.predict([y, X])
- 
+        choice = self.model.predict_on_batch((self.state, self.agent_units_map))
+        choice = np.argmax(choice)
+
+
         return random.choice([self.train_drone(obs), self.train_overlord(obs), self.build_pool(obs), self.train_zergling(obs), self.attack(obs)])
 
     def no_op(self,obs):
@@ -138,31 +138,33 @@ class honoursAgent(base_agent.BaseAgent):
         self.larva_count = obs.observation.player.larva_count
         self.state = (float(self.minerals), float(self.gas), float(self.supply), float(self.supply_cap), float(self.army_supply), float(self.worker_supply), float(self.idle_workers), float(self. larva_count))
         self.state = np.asarray(self.state)
+        self.state = np.reshape(self.state,(1,8))
 
 
     def populate_map(self,obs):
-        unit_map = np.zeros(shape= (64, 64, 2))
+        unit_map = np.zeros(shape= (1, 64, 64, 2))
         for unit in obs.observation.raw_units:
             if unit.alliance == features.PlayerRelative.SELF:
-                unit_map[unit.x][unit.y][0] = 1
+                unit_map[0][unit.x][unit.y][0] = 1
             else:
-                unit_map[unit.x][unit.y][1] = 1
+                unit_map[0][unit.x][unit.y][1] = 1
         unit_map = unit_map.astype(np.float)
         return unit_map
 
     def create_model(self):
         ## create NN model
         ##numerical state input
-        nn_input = Input(shape=(self.nn_input_shape))
+        nn_input = Input(shape=(self.nn_input_shape,),name= "nn_input")
 
         nn_layer1 = Dense(100, activation="relu")(nn_input)
         nn_layer2 = Dense(50, activation="relu", name="dense_end")(nn_layer1)
 
         nn_flatten = Flatten()(nn_layer2)
 
+
         ## create Conv model
         ## map input
-        conv_input = Input(shape=(64, 64, 2))
+        conv_input = Input(shape=(64, 64, 2), name = "conv_input")
 
         conv_layer_1 = Conv2D(64, (3,3), activation="relu")(conv_input)
         conv_pool_1 = MaxPooling2D(pool_size= (3,3))(conv_layer_1)
@@ -183,7 +185,7 @@ class honoursAgent(base_agent.BaseAgent):
         out = Dense(8, activation="linear")(merged_layer)
 
         ##model construction + compile
-        merged_model = Model([nn_input, conv_input], out)
+        merged_model = Model(inputs = [nn_input, conv_input], outputs = out, name = "merged_model_1")
         merged_model.compile(loss="mse", optimizer="adam", metrics=["accuracy"])
 
         merged_model.summary()
