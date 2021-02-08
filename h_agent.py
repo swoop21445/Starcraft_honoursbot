@@ -55,7 +55,7 @@ class honoursAgent(base_agent.BaseAgent):
         self.model_output_len = len(action_space)
 
         try :
-            self.model = keras.load_model("models/" + model_name)
+            self.model = Model.load_model("models/" + model_name)
         except:
             self.model = self.create_model()
         self.target_model = self.create_model()
@@ -233,7 +233,7 @@ class honoursAgent(base_agent.BaseAgent):
     
     def ovy_overproduction_penalty(self,obs):
          ##solving overlord overproduction by removing score for overlords over 200 supply
-            if self.supply_cap = 200:
+            if self.supply_cap == 200:
                 overlords = self.get_units_by_type(obs,units.Zerg.Overlord)
                 num_overlords = len(overlords)
                 ## 25 overlords + 1 hatchery is just over 200 control (control produces supply)
