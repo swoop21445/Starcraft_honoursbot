@@ -13,14 +13,14 @@ import tensorflow as tf
 from keras.callbacks import TensorBoard
 from keras.utils import normalize
 from keras.layers.merge import concatenate
-from keras.models import Model
+from keras.models import Model,load_model, save_model
 from keras.layers import Dense, Input, Activation, Flatten, Conv2D, MaxPooling2D
 from tensormod import ModifiedTensorBoard
 
 max_stored_states = 50_000
-min_stored_states = 10_000 ##changed for test ease 10000 = normal
+min_stored_states = 1000 ##changed for test ease 10000 = normal
 minibatch_size = 50
-update_value = 5 ## changed for testing ease 5 = normal
+update_value = 1 ## changed for testing ease 5 = normal
 model_name = "test-basic-actions"
 
 
@@ -54,8 +54,10 @@ class honoursAgent(base_agent.BaseAgent):
 
         self.model_output_len = len(action_space)
 
-
-        self.model = self.create_model()
+        try :
+            self.model = keras.load_model("models/" + model_name)
+        except:
+            self.model = self.create_model()
         self.target_model = self.create_model()
         self.weights = self.model.get_weights()
 
@@ -310,4 +312,5 @@ class honoursAgent(base_agent.BaseAgent):
         
         for index in tqdm(range(0,len(y))):
             self.model.fit(x[index], y[index], batch_size = minibatch_size, verbose=0, shuffle=False) ##callbacks = [self.tensorboard] removed
+        self.model.save("models/" + model_name)
 
