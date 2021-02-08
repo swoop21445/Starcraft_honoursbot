@@ -89,6 +89,9 @@ class honoursAgent(base_agent.BaseAgent):
         units_map = self.populate_map(obs)
         numerical_state = self.build_state(obs)
 
+        penalty = self.ovy_overproduction_penalty(obs)
+        reward = reward - penalty
+
         place_holder_actions = 0
 
         ## model prediction or random action based on epsilon
@@ -227,6 +230,19 @@ class honoursAgent(base_agent.BaseAgent):
                 unit_map[0][unit.x][unit.y][1] = 1
         unit_map = unit_map.astype(np.float)
         return unit_map
+    
+    def ovy_overproduction_penalty(self,obs):
+         ##solving overlord overproduction by removing score for overlords over 200 supply
+            if self.supply_cap = 200:
+                overlords = self.get_units_by_type(obs,units.Zerg.Overlord)
+                num_overlords = len(overlords)
+                ## 25 overlords + 1 hatchery is just over 200 control (control produces supply)
+                overproduction = num_overlords - 25
+                ##reward penalty
+                penalty =  (overproduction * 100)
+                return penalty
+            return 0
+
 
     def update_state_mem(self, state):
         self.stored_states.append(state)
