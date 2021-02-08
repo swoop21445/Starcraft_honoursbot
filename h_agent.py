@@ -21,7 +21,7 @@ max_stored_states = 50_000
 min_stored_states = 1000 ##changed for test ease 10000 = normal
 minibatch_size = 50
 update_value = 1 ## changed for testing ease 5 = normal
-model_name = "test-basic-actions"
+model_name = "basic-overproduction-penalty"
 
 
 
