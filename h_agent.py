@@ -23,9 +23,7 @@ minibatch_size = 50
 update_value = 5 ## changed for testing ease 5 = normal
 model_name = "test-basic-actions"
 
-epsilon = 0.99
-epsilon_decay = 0.99975
-discount = 0.99
+
 
 class honoursAgent(base_agent.BaseAgent):
     def __init__(self):
@@ -62,6 +60,10 @@ class honoursAgent(base_agent.BaseAgent):
         self.weights = self.model.get_weights()
 
         self.target_model.set_weights(self.weights)
+
+        self.epsilon = 0.99
+        self.epsilon_decay = 0.9999975
+        self.discount = 0.99
 
     def reset(self):
         super(honoursAgent,self).reset()
@@ -110,12 +112,12 @@ class honoursAgent(base_agent.BaseAgent):
         
 
     def choice_maker(self,obs, numerical_state, units_map):
-        if random.random() > epsilon:
+        if random.random() > self.epsilon:
             choice = self.model.predict((numerical_state, units_map))
             choice = np.argmax(choice)
         else:
             choice = random.randint(0,(self.model_output_len - 1))
-        epsilon = epsilon * epsilon_decay
+        self.epsilon = self.epsilon * self.epsilon_decay
         return choice
 
 
@@ -297,7 +299,7 @@ class honoursAgent(base_agent.BaseAgent):
 
             
             max_future_q = np.max(future_qs[index])
-            new_q = reward + discount * max_future_q
+            new_q = reward + self.discount * max_future_q
             
 
             current_qs = old_qs[index]
