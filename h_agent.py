@@ -21,7 +21,7 @@ max_stored_states = 50_000
 min_stored_states = 1000  # changed for test ease 10000 = normal
 minibatch_size = 50
 update_value = 1  # changed for testing ease 5 = normal
-model_name = "basic-overproduction-penalty"
+model_name = "turtle-agent_fixes"
 
 
 class honoursAgent(base_agent.BaseAgent):
@@ -64,7 +64,8 @@ class honoursAgent(base_agent.BaseAgent):
         self.target_model.set_weights(self.weights)
 
         self.epsilon = 0.99
-        self.epsilon_decay = 0.9999975
+        # for speed of training epsilon decay is reduced should be 0.9999975
+        self.epsilon_decay = 0.99975
         self.discount = 0.99
 
     def reset(self):
@@ -199,9 +200,8 @@ class honoursAgent(base_agent.BaseAgent):
         zerglings = self.get_units_by_type(obs, units.Zerg.Zergling)
         if len(zerglings) > 0:
             target_location = (35, 42) if self.main_base_left else (22, 21)
-            distances = self.get_distances(obs, zerglings, target_location)
-            zergling = zerglings[np.argmax(distances)]
-            return actions.RAW_FUNCTIONS.Attack_pt("now", zergling.tag, (target_location[0], target_location[1]))
+            zerglings = [unit.tag for unit in zerglings]
+            return actions.RAW_FUNCTIONS.Attack_pt("now", zerglings, (target_location[0], target_location[1]))
         return actions.RAW_FUNCTIONS.no_op()
 
     def build_state(self, obs):
@@ -216,7 +216,6 @@ class honoursAgent(base_agent.BaseAgent):
         state = (float(self.minerals), float(self.gas), float(self.supply), float(self.supply_cap), float(
             self.army_supply), float(self.worker_supply), float(self.idle_workers), float(self. larva_count))
         state = np.asarray(state)
-        state = normalize(state)
         state = np.reshape(state, (1, 8))
         return state
 
