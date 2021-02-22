@@ -21,7 +21,7 @@ max_stored_states = 50_000
 min_stored_states = 1000  # changed for test ease 10000 = normal
 minibatch_size = 50
 update_value = 1  # changed for testing ease 5 = normal
-model_name = "queen_production"
+model_name = "queen_injects"
 
 
 class honoursAgent(base_agent.BaseAgent):
@@ -41,7 +41,9 @@ class honoursAgent(base_agent.BaseAgent):
                      "army_supply",
                      "worker_supply",
                      "idle_workers",
-                     "larva_count"]
+                     "larva_count",
+                     "queens_count",
+                     "queen_energy"]
 
         self.nn_input_shape = len(state_len)
 
@@ -214,6 +216,15 @@ class honoursAgent(base_agent.BaseAgent):
             return actions.RAW_FUNCTIONS.Attack_pt("now", zerglings, (target_location[0], target_location[1]))
         return actions.RAW_FUNCTIONS.no_op()
 
+    def get_queen_energy_status(self, obs):
+        queens = self.get_units_by_type(obs, units.Zerg.Queen)
+        if len(queens) > 0:
+            queen_energy = [unit.energy for unit in queens]
+            queen = np.argmax(queen_energy)
+            queen_energy = queens[queen].energy
+            return queen_energy
+        return 0
+
     def build_state(self, obs):
         self.minerals = obs.observation.player.minerals
         self.gas = obs.observation.player.vespene
@@ -223,10 +234,12 @@ class honoursAgent(base_agent.BaseAgent):
         self.worker_supply = obs.observation.player.food_workers
         self.idle_workers = obs.observation.player.idle_worker_count
         self.larva_count = obs.observation.player.larva_count
+        self.queens_count = len(self.get_units_by_type(obs, units.Zerg.Queen))
+        self.queen_energy = self.get_queen_energy_status(obs)
         state = (float(self.minerals), float(self.gas), float(self.supply), float(self.supply_cap), float(
-            self.army_supply), float(self.worker_supply), float(self.idle_workers), float(self. larva_count))
+            self.army_supply), float(self.worker_supply), float(self.idle_workers), float(self. larva_count), float(self.queens_count), float(self.queen_energy))
         state = np.asarray(state)
-        state = np.reshape(state, (1, 8))
+        state = np.reshape(state, (1, self.nn_input_shape))
         return state
 
     def populate_map(self, obs):
