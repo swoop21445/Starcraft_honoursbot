@@ -33,6 +33,7 @@ class honoursAgent(base_agent.BaseAgent):
 
         self.stored_states = deque(maxlen=max_stored_states)
         self.target_update_counter = -1
+        self.numb_game = self.target_update_counter
 
         state_len = ["minerals",
                      "gas",
@@ -78,6 +79,8 @@ class honoursAgent(base_agent.BaseAgent):
         self.state = "begin"
 
         self.target_update_counter += 1
+        self.numb_game += 1
+        print("Game Number " + self.numb_game + " Starting....")
 
         if self.target_update_counter > update_value:
             self.target_model.set_weights(self.model.get_weights())
@@ -362,7 +365,7 @@ class honoursAgent(base_agent.BaseAgent):
             x.append((old_state[0], old_state[1]))
             y.append(current_qs)
 
-        for index in tqdm(range(0, len(y))):
+        for index in range(0, len(y)):
             # callbacks = [self.tensorboard] removed
             self.model.fit(
                 x[index], y[index], batch_size=minibatch_size, verbose=0, shuffle=False)
