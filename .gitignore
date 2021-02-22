@@ -8,3 +8,5 @@ logs/queen_injects-1613996888/events.out.tfevents.1613996888.DESKTOP-H712UPO.203
 logs/queen_injects-1613996888/events.out.tfevents.1613996888.DESKTOP-H712UPO.20384.13.v2
 __pycache__/*
 logs/*
+__pycache__/h_agent.cpython-38.pyc
+__pycache__/tensormod.cpython-38.pyc

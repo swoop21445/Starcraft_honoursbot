@@ -80,7 +80,7 @@ class honoursAgent(base_agent.BaseAgent):
 
         self.target_update_counter += 1
         self.numb_game += 1
-        print("Game Number " + self.numb_game + " Starting....")
+        print("Game Number " + str(self.numb_game)+ " Starting....")
 
         if self.target_update_counter > update_value:
             self.target_model.set_weights(self.model.get_weights())
