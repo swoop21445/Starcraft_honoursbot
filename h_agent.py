@@ -21,7 +21,7 @@ max_stored_states = 50_000
 min_stored_states = 1000  # changed for test ease 10000 = normal
 minibatch_size = 50
 update_value = 1  # changed for testing ease 5 = normal
-model_name = "turtle-agent_fixes"
+model_name = "queen_production"
 
 
 class honoursAgent(base_agent.BaseAgent):
@@ -50,7 +50,8 @@ class honoursAgent(base_agent.BaseAgent):
                         "self.build_pool(obs)",
                         "self.train_overlord(obs)",
                         "self.train_zergling(obs)",
-                        "self.attack(obs)"]
+                        "self.attack(obs)",
+                        "self.train_queen(obs)"]
 
         self.model_output_len = len(action_space)
 
@@ -138,6 +139,8 @@ class honoursAgent(base_agent.BaseAgent):
             return self.train_zergling(obs)
         elif action_number == 5:
             return self.attack(obs)
+        elif action_number == 6:
+            return self.train_queen(obs)
         else:
             raise Exception("Action scope error")
 
@@ -194,6 +197,13 @@ class honoursAgent(base_agent.BaseAgent):
                 larva = self.select_larva(obs)
                 if len(larva) > 0:
                     return actions.RAW_FUNCTIONS.Train_Zergling_quick("now", larva.tag)
+        return actions.RAW_FUNCTIONS.no_op()
+
+    def train_queen(self, obs):
+        if self.minerals >= 150:
+            hatcheries = self.get_units_by_type(obs, units.Zerg.Hatchery)
+            if len(hatcheries) > 0:
+                return actions.RAW_FUNCTIONS.Train_Queen_quick("now", hatcheries[0].tag)
         return actions.RAW_FUNCTIONS.no_op()
 
     def attack(self, obs):
