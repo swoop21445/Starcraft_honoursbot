@@ -53,7 +53,8 @@ class honoursAgent(base_agent.BaseAgent):
                         "self.train_overlord(obs)",
                         "self.train_zergling(obs)",
                         "self.attack(obs)",
-                        "self.train_queen(obs)"]
+                        "self.train_queen(obs)",
+                        "self.queen_inject(obs)"]
 
         self.model_output_len = len(action_space)
 
@@ -108,9 +109,9 @@ class honoursAgent(base_agent.BaseAgent):
             self.state = [numerical_state, units_map,
                           action_index, reward, self.old_state]
 
-        hatchery = self.get_units_by_type(obs, units.Zerg.Hatchery)
-        if len(hatchery) > 0:
-            self.main_base_left = (hatchery[0].x < 32)
+        self.hatchery = self.get_units_by_type(obs, units.Zerg.Hatchery)
+        if len(self.hatchery) > 0:
+            self.main_base_left = (self.hatchery[0].x < 32)
 
         self.update_state_mem(self.state)
         self.old_state = self.state
@@ -143,6 +144,8 @@ class honoursAgent(base_agent.BaseAgent):
             return self.attack(obs)
         elif action_number == 6:
             return self.train_queen(obs)
+        elif action_number == 7:
+            return self.queen_inject(obs)
         else:
             raise Exception("Action scope error")
 
@@ -201,6 +204,15 @@ class honoursAgent(base_agent.BaseAgent):
                     return actions.RAW_FUNCTIONS.Train_Zergling_quick("now", larva.tag)
         return actions.RAW_FUNCTIONS.no_op()
 
+    def attack(self, obs):
+        zerglings = self.get_units_by_type(obs, units.Zerg.Zergling)
+        if len(zerglings) > 0:
+            target_location = (35, 42) if self.main_base_left else (22, 21)
+            zerglings = [unit.tag for unit in zerglings]
+            return actions.RAW_FUNCTIONS.Attack_pt("now", zerglings, (target_location[0], target_location[1]))
+        return actions.RAW_FUNCTIONS.no_op()
+
+# use queue checks when multiple hatcheries are implemented
     def train_queen(self, obs):
         if self.minerals >= 150:
             hatcheries = self.get_units_by_type(obs, units.Zerg.Hatchery)
@@ -208,12 +220,10 @@ class honoursAgent(base_agent.BaseAgent):
                 return actions.RAW_FUNCTIONS.Train_Queen_quick("now", hatcheries[0].tag)
         return actions.RAW_FUNCTIONS.no_op()
 
-    def attack(self, obs):
-        zerglings = self.get_units_by_type(obs, units.Zerg.Zergling)
-        if len(zerglings) > 0:
-            target_location = (35, 42) if self.main_base_left else (22, 21)
-            zerglings = [unit.tag for unit in zerglings]
-            return actions.RAW_FUNCTIONS.Attack_pt("now", zerglings, (target_location[0], target_location[1]))
+    def queen_inject(self, obs):
+        if self.queen_energy > 25:
+            queen = self.get_inject_queen(obs)
+            return actions.RAW_FUNCTIONS.Effect_InjectLarva_unit("now", queen.tag, self.hatchery[0].tag)
         return actions.RAW_FUNCTIONS.no_op()
 
     def get_queen_energy_status(self, obs):
@@ -224,6 +234,13 @@ class honoursAgent(base_agent.BaseAgent):
             queen_energy = queens[queen].energy
             return queen_energy
         return 0
+
+# use distance + energy checks in future
+    def get_inject_queen(self, obs):
+        queens = self.get_units_by_type(obs, units.Zerg.Queen)
+        queen_energy = [unit.energy for unit in queens]
+        queen_energy_highest = np.argmax(queen_energy)
+        return queens[queen_energy_highest]
 
     def build_state(self, obs):
         self.minerals = obs.observation.player.minerals
