@@ -33,7 +33,7 @@ class honoursAgent(base_agent.BaseAgent):
 
         self.stored_states = deque(maxlen=max_stored_states)
         self.target_update_counter = -1
-        self.numb_game = self.target_update_counter
+        self.numb_game = 0
 
         state_len = ["minerals",
                      "gas",
@@ -235,7 +235,7 @@ class honoursAgent(base_agent.BaseAgent):
             queen = np.argmax(queen_energy)
             queen_energy = queens[queen].energy
             return queen_energy, len(queens), queens[queen].tag
-        return 0
+        return 0, 0, 0
 
     def build_state(self, obs):
         self.minerals = obs.observation.player.minerals

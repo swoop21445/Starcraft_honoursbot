@@ -1,4 +1,3 @@
-__pycache__/h_agent.cpython-38.pyc
 .vscode
 logs/queen_injects-1613996720/events.out.tfevents.1613996720.DESKTOP-H712UPO.11336.5.v2
 logs/queen_injects-1613996720/events.out.tfevents.1613996720.DESKTOP-H712UPO.11336.13.v2
@@ -6,7 +5,5 @@ logs/queen_injects-1613996762/events.out.tfevents.1613996762.DESKTOP-H712UPO.118
 logs/queen_injects-1613996762/events.out.tfevents.1613996762.DESKTOP-H712UPO.11876.13.v2
 logs/queen_injects-1613996888/events.out.tfevents.1613996888.DESKTOP-H712UPO.20384.5.v2
 logs/queen_injects-1613996888/events.out.tfevents.1613996888.DESKTOP-H712UPO.20384.13.v2
-__pycache__/*
 logs/*
-__pycache__/h_agent.cpython-38.pyc
-__pycache__/tensormod.cpython-38.pyc
+*.pyc
