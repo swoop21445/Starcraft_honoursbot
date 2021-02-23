@@ -80,7 +80,7 @@ class honoursAgent(base_agent.BaseAgent):
 
         self.target_update_counter += 1
         self.numb_game += 1
-        print("Game Number " + str(self.numb_game)+ " Starting....")
+        print("Game Number " + str(self.numb_game) + " Starting....")
 
         if self.target_update_counter > update_value:
             self.target_model.set_weights(self.model.get_weights())
@@ -225,8 +225,7 @@ class honoursAgent(base_agent.BaseAgent):
 
     def queen_inject(self, obs):
         if self.queen_energy > 25:
-            queen = self.get_inject_queen(obs)
-            return actions.RAW_FUNCTIONS.Effect_InjectLarva_unit("now", queen.tag, self.hatchery[0].tag)
+            return actions.RAW_FUNCTIONS.Effect_InjectLarva_unit("now", self.queen, self.hatchery[0].tag)
         return actions.RAW_FUNCTIONS.no_op()
 
     def get_queen_energy_status(self, obs):
@@ -235,15 +234,8 @@ class honoursAgent(base_agent.BaseAgent):
             queen_energy = [unit.energy for unit in queens]
             queen = np.argmax(queen_energy)
             queen_energy = queens[queen].energy
-            return queen_energy
+            return queen_energy, len(queens), queens[queen].tag
         return 0
-
-# use distance + energy checks in future
-    def get_inject_queen(self, obs):
-        queens = self.get_units_by_type(obs, units.Zerg.Queen)
-        queen_energy = [unit.energy for unit in queens]
-        queen_energy_highest = np.argmax(queen_energy)
-        return queens[queen_energy_highest]
 
     def build_state(self, obs):
         self.minerals = obs.observation.player.minerals
@@ -254,8 +246,8 @@ class honoursAgent(base_agent.BaseAgent):
         self.worker_supply = obs.observation.player.food_workers
         self.idle_workers = obs.observation.player.idle_worker_count
         self.larva_count = obs.observation.player.larva_count
-        self.queens_count = len(self.get_units_by_type(obs, units.Zerg.Queen))
-        self.queen_energy = self.get_queen_energy_status(obs)
+        self.queen_energy, self.queens_count, self.queen = self.get_queen_energy_status(
+            obs)
         state = (float(self.minerals), float(self.gas), float(self.supply), float(self.supply_cap), float(
             self.army_supply), float(self.worker_supply), float(self.idle_workers), float(self. larva_count), float(self.queens_count), float(self.queen_energy))
         state = np.asarray(state)
