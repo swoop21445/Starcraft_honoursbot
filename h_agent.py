@@ -44,7 +44,8 @@ class honoursAgent(base_agent.BaseAgent):
                      "idle_workers",
                      "larva_count",
                      "queens_count",
-                     "queen_energy"]
+                     "queen_energy",
+                     "game_loops "]
 
         self.nn_input_shape = len(state_len)
 
@@ -79,6 +80,8 @@ class honoursAgent(base_agent.BaseAgent):
         self.state = "begin"
 
         self.target_update_counter += 1
+        if self.numb_game != 0:
+            print("Game reward = " + str(self.reward_debug))
         self.numb_game += 1
         print("Game Number " + str(self.numb_game) + " Starting....")
 
@@ -92,6 +95,8 @@ class honoursAgent(base_agent.BaseAgent):
 
         self.build_state(obs)
         reward = obs.observation.score_cumulative[0]
+        # remove in full release
+        self.reward_debug = reward
         units_map = self.populate_map(obs)
         numerical_state = self.build_state(obs)
 
@@ -120,6 +125,9 @@ class honoursAgent(base_agent.BaseAgent):
         self.old_state = self.state
 
         action = self.action_number_matcher(obs, action_index)
+
+        if self.game_loops > 40000:
+            action = self.civil_war(obs)
 
         return action
 
@@ -237,6 +245,13 @@ class honoursAgent(base_agent.BaseAgent):
             return queen_energy, len(queens), queens[queen].tag
         return 0, 0, 0
 
+    def civil_war(self, obs):
+        units = [unit for unit in obs.observation.raw_units if unit.alliance ==
+                 features.PlayerRelative.SELF]
+        attacker = units[random.choice(0, len(units))].tag
+        victim = units[random.choice(0, len(units))].tag
+        return actions.RAW_FUNCTIONS.Attack_unit("now", attacker, victim)
+
     def build_state(self, obs):
         self.minerals = obs.observation.player.minerals
         self.gas = obs.observation.player.vespene
@@ -248,8 +263,9 @@ class honoursAgent(base_agent.BaseAgent):
         self.larva_count = obs.observation.player.larva_count
         self.queen_energy, self.queens_count, self.queen = self.get_queen_energy_status(
             obs)
+        self.game_loops = obs.observation.game_loop
         state = (float(self.minerals), float(self.gas), float(self.supply), float(self.supply_cap), float(
-            self.army_supply), float(self.worker_supply), float(self.idle_workers), float(self. larva_count), float(self.queens_count), float(self.queen_energy))
+            self.army_supply), float(self.worker_supply), float(self.idle_workers), float(self. larva_count), float(self.queens_count), float(self.queen_energy), float(self.game_loops))
         state = np.asarray(state)
         state = np.reshape(state, (1, self.nn_input_shape))
         return state
@@ -361,4 +377,4 @@ class honoursAgent(base_agent.BaseAgent):
             # callbacks = [self.tensorboard] removed
             self.model.fit(
                 x[index], y[index], batch_size=minibatch_size, verbose=0, shuffle=False)
-        self.model.save("models/" + model_name)
+        ##self.model.save("models/" + model_name)
