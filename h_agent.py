@@ -22,6 +22,7 @@ min_stored_states = 1000  # changed for test ease 10000 = normal
 minibatch_size = 50
 update_value = 1  # changed for testing ease 5 = normal
 model_name = "queen_injects"
+terminate_value = 20_000
 
 
 class honoursAgent(base_agent.BaseAgent):
@@ -71,7 +72,7 @@ class honoursAgent(base_agent.BaseAgent):
 
         self.epsilon = 0.99
         # for speed of training epsilon decay is reduced should be 0.9999975
-        self.epsilon_decay = 0.99975
+        self.epsilon_decay = 0.9999975
         self.discount = 0.99
 
     def reset(self):
@@ -126,7 +127,7 @@ class honoursAgent(base_agent.BaseAgent):
 
         action = self.action_number_matcher(obs, action_index)
 
-        if self.game_loops > 40000:
+        if self.game_loops > terminate_value:
             action = self.civil_war(obs)
 
         return action
@@ -233,7 +234,10 @@ class honoursAgent(base_agent.BaseAgent):
 
     def queen_inject(self, obs):
         if self.queen_energy > 25:
-            return actions.RAW_FUNCTIONS.Effect_InjectLarva_unit("now", self.queen, self.hatchery[0].tag)
+            try:
+                return actions.RAW_FUNCTIONS.Effect_InjectLarva_unit("now", self.queen, self.hatchery[0].tag)
+            except:
+                return actions.RAW_FUNCTIONS.no_op()
         return actions.RAW_FUNCTIONS.no_op()
 
     def get_queen_energy_status(self, obs):
@@ -246,11 +250,24 @@ class honoursAgent(base_agent.BaseAgent):
         return 0, 0, 0
 
     def civil_war(self, obs):
-        units = [unit for unit in obs.observation.raw_units if unit.alliance ==
-                 features.PlayerRelative.SELF]
-        attacker = units[random.choice(0, len(units))].tag
-        victim = units[random.choice(0, len(units))].tag
-        return actions.RAW_FUNCTIONS.Attack_unit("now", attacker, victim)
+        hatchery = self.get_units_by_type(obs, units.Zerg.Hatchery)
+        spawning_pool = self.get_units_by_type(obs,units.Zerg.SpawningPool)
+        if len(hatchery) > 0 or len(spawning_pool) > 0:
+            drones = self.get_units_by_type(obs, units.Zerg.Drone)
+            queens = self.get_units_by_type(obs, units.Zerg.Queen)
+            queen_tags = [unit.tag for unit in queens]
+            if len(queen_tags) > 0:
+                attacker_tags = queen_tags
+            elif len(drones) > 0:
+                drone_tags = [unit.tag for unit in drones]
+                attacker_tags = drone_tags
+            else:
+                return actions.RAW_FUNCTIONS.no_op()
+            if len(hatchery) > 0:
+                return actions.RAW_FUNCTIONS.Attack_unit("now", attacker_tags, hatchery[0].tag)
+            else:
+                return actions.RAW_FUNCTIONS.Attack_unit("now", attacker_tags, spawning_pool[0].tag)
+        return actions.RAW_FUNCTIONS.no_op()
 
     def build_state(self, obs):
         self.minerals = obs.observation.player.minerals
