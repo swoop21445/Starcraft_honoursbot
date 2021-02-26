@@ -122,7 +122,7 @@ class honoursAgent(base_agent.BaseAgent):
         if len(self.hatchery) > 0:
             self.main_base_left = (self.hatchery[0].x < 32)
 
-        self.update_state_mem(self.state)
+        self.update_state_mem(self.state, reward)
         self.old_state = self.state
 
         action = self.action_number_matcher(obs, action_index)
@@ -251,7 +251,7 @@ class honoursAgent(base_agent.BaseAgent):
 
     def civil_war(self, obs):
         hatchery = self.get_units_by_type(obs, units.Zerg.Hatchery)
-        spawning_pool = self.get_units_by_type(obs,units.Zerg.SpawningPool)
+        spawning_pool = self.get_units_by_type(obs, units.Zerg.SpawningPool)
         if len(hatchery) > 0 or len(spawning_pool) > 0:
             drones = self.get_units_by_type(obs, units.Zerg.Drone)
             queens = self.get_units_by_type(obs, units.Zerg.Queen)
@@ -309,8 +309,13 @@ class honoursAgent(base_agent.BaseAgent):
             return penalty
         return 0
 
-    def update_state_mem(self, state):
+    def update_state_mem(self, state, reward):
         self.stored_states.append(state)
+        # 160 is the longest posible action for zerg
+        if len(self.stored_states) >= 160:
+            past_state_index = len(self.stored_states) - 160
+            # reward has the 4th position in the state list
+            self.stored_states[past_state_index][3] = reward
 
     def create_model(self):
         # create NN model
