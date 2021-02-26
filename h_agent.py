@@ -21,7 +21,8 @@ max_stored_states = 50_000
 min_stored_states = 1000  # changed for test ease 10000 = normal
 minibatch_size = 50
 update_value = 1  # changed for testing ease 5 = normal
-model_name = "queen_production"
+model_name = "queen_injects"
+terminate_value = 20_000
 
 
 class honoursAgent(base_agent.BaseAgent):
@@ -33,6 +34,7 @@ class honoursAgent(base_agent.BaseAgent):
 
         self.stored_states = deque(maxlen=max_stored_states)
         self.target_update_counter = -1
+        self.numb_game = 0
 
         state_len = ["minerals",
                      "gas",
@@ -41,7 +43,10 @@ class honoursAgent(base_agent.BaseAgent):
                      "army_supply",
                      "worker_supply",
                      "idle_workers",
-                     "larva_count"]
+                     "larva_count",
+                     "queens_count",
+                     "queen_energy",
+                     "game_loops "]
 
         self.nn_input_shape = len(state_len)
 
@@ -51,7 +56,8 @@ class honoursAgent(base_agent.BaseAgent):
                         "self.train_overlord(obs)",
                         "self.train_zergling(obs)",
                         "self.attack(obs)",
-                        "self.train_queen(obs)"]
+                        "self.train_queen(obs)",
+                        "self.queen_inject(obs)"]
 
         self.model_output_len = len(action_space)
 
@@ -66,7 +72,7 @@ class honoursAgent(base_agent.BaseAgent):
 
         self.epsilon = 0.99
         # for speed of training epsilon decay is reduced should be 0.9999975
-        self.epsilon_decay = 0.99975
+        self.epsilon_decay = 0.9999975
         self.discount = 0.99
 
     def reset(self):
@@ -75,6 +81,10 @@ class honoursAgent(base_agent.BaseAgent):
         self.state = "begin"
 
         self.target_update_counter += 1
+        if self.numb_game != 0:
+            print("Game reward = " + str(self.reward_debug))
+        self.numb_game += 1
+        print("Game Number " + str(self.numb_game) + " Starting....")
 
         if self.target_update_counter > update_value:
             self.target_model.set_weights(self.model.get_weights())
@@ -86,6 +96,8 @@ class honoursAgent(base_agent.BaseAgent):
 
         self.build_state(obs)
         reward = obs.observation.score_cumulative[0]
+        # remove in full release
+        self.reward_debug = reward
         units_map = self.populate_map(obs)
         numerical_state = self.build_state(obs)
 
@@ -106,14 +118,17 @@ class honoursAgent(base_agent.BaseAgent):
             self.state = [numerical_state, units_map,
                           action_index, reward, self.old_state]
 
-        hatchery = self.get_units_by_type(obs, units.Zerg.Hatchery)
-        if len(hatchery) > 0:
-            self.main_base_left = (hatchery[0].x < 32)
+        self.hatchery = self.get_units_by_type(obs, units.Zerg.Hatchery)
+        if len(self.hatchery) > 0:
+            self.main_base_left = (self.hatchery[0].x < 32)
 
         self.update_state_mem(self.state)
         self.old_state = self.state
 
         action = self.action_number_matcher(obs, action_index)
+
+        if self.game_loops > terminate_value:
+            action = self.civil_war(obs)
 
         return action
 
@@ -141,6 +156,8 @@ class honoursAgent(base_agent.BaseAgent):
             return self.attack(obs)
         elif action_number == 6:
             return self.train_queen(obs)
+        elif action_number == 7:
+            return self.queen_inject(obs)
         else:
             raise Exception("Action scope error")
 
@@ -199,6 +216,15 @@ class honoursAgent(base_agent.BaseAgent):
                     return actions.RAW_FUNCTIONS.Train_Zergling_quick("now", larva.tag)
         return actions.RAW_FUNCTIONS.no_op()
 
+    def attack(self, obs):
+        zerglings = self.get_units_by_type(obs, units.Zerg.Zergling)
+        if len(zerglings) > 0:
+            target_location = (35, 42) if self.main_base_left else (22, 21)
+            zerglings = [unit.tag for unit in zerglings]
+            return actions.RAW_FUNCTIONS.Attack_pt("now", zerglings, (target_location[0], target_location[1]))
+        return actions.RAW_FUNCTIONS.no_op()
+
+# use queue checks when multiple hatcheries are implemented
     def train_queen(self, obs):
         if self.minerals >= 150:
             hatcheries = self.get_units_by_type(obs, units.Zerg.Hatchery)
@@ -206,12 +232,41 @@ class honoursAgent(base_agent.BaseAgent):
                 return actions.RAW_FUNCTIONS.Train_Queen_quick("now", hatcheries[0].tag)
         return actions.RAW_FUNCTIONS.no_op()
 
-    def attack(self, obs):
-        zerglings = self.get_units_by_type(obs, units.Zerg.Zergling)
-        if len(zerglings) > 0:
-            target_location = (35, 42) if self.main_base_left else (22, 21)
-            zerglings = [unit.tag for unit in zerglings]
-            return actions.RAW_FUNCTIONS.Attack_pt("now", zerglings, (target_location[0], target_location[1]))
+    def queen_inject(self, obs):
+        if self.queen_energy > 25:
+            try:
+                return actions.RAW_FUNCTIONS.Effect_InjectLarva_unit("now", self.queen, self.hatchery[0].tag)
+            except:
+                return actions.RAW_FUNCTIONS.no_op()
+        return actions.RAW_FUNCTIONS.no_op()
+
+    def get_queen_energy_status(self, obs):
+        queens = self.get_units_by_type(obs, units.Zerg.Queen)
+        if len(queens) > 0:
+            queen_energy = [unit.energy for unit in queens]
+            queen = np.argmax(queen_energy)
+            queen_energy = queens[queen].energy
+            return queen_energy, len(queens), queens[queen].tag
+        return 0, 0, 0
+
+    def civil_war(self, obs):
+        hatchery = self.get_units_by_type(obs, units.Zerg.Hatchery)
+        spawning_pool = self.get_units_by_type(obs,units.Zerg.SpawningPool)
+        if len(hatchery) > 0 or len(spawning_pool) > 0:
+            drones = self.get_units_by_type(obs, units.Zerg.Drone)
+            queens = self.get_units_by_type(obs, units.Zerg.Queen)
+            queen_tags = [unit.tag for unit in queens]
+            if len(queen_tags) > 0:
+                attacker_tags = queen_tags
+            elif len(drones) > 0:
+                drone_tags = [unit.tag for unit in drones]
+                attacker_tags = drone_tags
+            else:
+                return actions.RAW_FUNCTIONS.no_op()
+            if len(hatchery) > 0:
+                return actions.RAW_FUNCTIONS.Attack_unit("now", attacker_tags, hatchery[0].tag)
+            else:
+                return actions.RAW_FUNCTIONS.Attack_unit("now", attacker_tags, spawning_pool[0].tag)
         return actions.RAW_FUNCTIONS.no_op()
 
     def build_state(self, obs):
@@ -223,10 +278,13 @@ class honoursAgent(base_agent.BaseAgent):
         self.worker_supply = obs.observation.player.food_workers
         self.idle_workers = obs.observation.player.idle_worker_count
         self.larva_count = obs.observation.player.larva_count
+        self.queen_energy, self.queens_count, self.queen = self.get_queen_energy_status(
+            obs)
+        self.game_loops = obs.observation.game_loop
         state = (float(self.minerals), float(self.gas), float(self.supply), float(self.supply_cap), float(
-            self.army_supply), float(self.worker_supply), float(self.idle_workers), float(self. larva_count))
+            self.army_supply), float(self.worker_supply), float(self.idle_workers), float(self. larva_count), float(self.queens_count), float(self.queen_energy), float(self.game_loops))
         state = np.asarray(state)
-        state = np.reshape(state, (1, 8))
+        state = np.reshape(state, (1, self.nn_input_shape))
         return state
 
     def populate_map(self, obs):
@@ -332,8 +390,8 @@ class honoursAgent(base_agent.BaseAgent):
             x.append((old_state[0], old_state[1]))
             y.append(current_qs)
 
-        for index in tqdm(range(0, len(y))):
+        for index in range(0, len(y)):
             # callbacks = [self.tensorboard] removed
             self.model.fit(
                 x[index], y[index], batch_size=minibatch_size, verbose=0, shuffle=False)
-        self.model.save("models/" + model_name)
+        ##self.model.save("models/" + model_name)
