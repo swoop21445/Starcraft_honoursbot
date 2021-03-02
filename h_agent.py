@@ -59,7 +59,8 @@ class honoursAgent(base_agent.BaseAgent):
                         "attack_expansion(obs",
                         "self.train_queen(obs)",
                         "self.queen_inject(obs)",
-                        "build_vespene_extractor"]
+                        "build_vespene_extractor",
+                        "harvest_gas"]
 
         self.model_output_len = len(action_space)
 
@@ -164,6 +165,8 @@ class honoursAgent(base_agent.BaseAgent):
             return self.queen_inject(obs)
         elif action_number == 9:
             return self.build_vespene_extractor(obs)
+        elif action_number == 10:
+            return self.harvest_gas(obs)
         else:
             raise Exception("Action scope error")
 
@@ -277,6 +280,16 @@ class honoursAgent(base_agent.BaseAgent):
                 geyser = geysers[target_geyser]
                 drone = self.select_builder(obs, drones, (geyser.x, geyser.y))
                 return actions.RAW_FUNCTIONS.Build_Extractor_unit("now", drone.tag, geyser.tag)
+        return actions.RAW_FUNCTIONS.no_op()
+
+    def harvest_gas(self,obs):
+        extractors = self.get_units_by_type(obs, units.Zerg.Extractor)
+        if len(extractors) > 1:
+            drones = self.get_units_by_type(obs, units.Zerg.Drone)
+            if len(drones) > 1:
+                extractor = random.choice(extractors)
+                drone = self.select_builder(obs,drones, (extractor.x, extractor.y))
+                return actions.RAW_FUNCTIONS.Harvest_Gather_unit("now", drone.tag, extractor.tag)
         return actions.RAW_FUNCTIONS.no_op()
 
     def get_queen_energy_status(self, obs):
