@@ -305,23 +305,22 @@ class honoursAgent(base_agent.BaseAgent):
         hatchery = self.get_units_by_type(obs, units.Zerg.Hatchery)
         spawning_pool = self.get_units_by_type(obs, units.Zerg.SpawningPool)
         extractor = self.get_units_by_type(obs, units.Zerg.Extractor)
-        if len(hatchery) > 0 or len(spawning_pool) > 0 or len(extractor) > 0:
+        warren = self.get_units_by_type(obs, units.Zerg.RoachWarren)
+        buildings = hatchery + spawning_pool + extractor + warren
+        building_tags = [unit.tag for unit in buildings]
+        if len(buildings) > 0:
             drones = self.get_units_by_type(obs, units.Zerg.Drone)
             queens = self.get_units_by_type(obs, units.Zerg.Queen)
-            queen_tags = [unit.tag for unit in queens]
-            if len(queen_tags) > 0:
-                attacker_tags = queen_tags
-            elif len(drones) > 0:
-                drone_tags = [unit.tag for unit in drones]
-                attacker_tags = drone_tags
+            zerglings = self.get_units_by_type(obs, units.Zerg.Zergling)
+            roaches = self.get_units_by_type(obs, units.Zerg.Roach)
+            attackers = drones + queens + zerglings + roaches
+            if len(attackers) > 0:
+                attacker_tags = [unit.tag for unit in attackers]
             else:
                 return actions.RAW_FUNCTIONS.no_op()
-            if len(hatchery) > 0:
-                return actions.RAW_FUNCTIONS.Attack_unit("now", attacker_tags, hatchery[0].tag)
-            elif len(spawning_pool) > 0:
-                return actions.RAW_FUNCTIONS.Attack_unit("now", attacker_tags, spawning_pool[0].tag)
-            else:
-                return actions.RAW_FUNCTIONS.Attack_unit("queued", attacker_tags, extractor[0].tag)
+            attacker = random.choice(attacker_tags)
+            target = random.choice(building_tags)
+            return actions.RAW_FUNCTIONS.Attack_unit("queued", attacker, target)
         return actions.RAW_FUNCTIONS.no_op()
 
     def build_state(self, obs):
