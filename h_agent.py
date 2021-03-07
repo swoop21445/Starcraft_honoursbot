@@ -21,7 +21,7 @@ max_stored_states = 50_000
 min_stored_states = 1000  # changed for test ease 10000 = normal
 minibatch_size = 50
 update_value = 1  # changed for testing ease 5 = normal
-model_name = "queen_injects"
+model_name = "extractors"
 terminate_value = 20_000
 
 
@@ -56,8 +56,11 @@ class honoursAgent(base_agent.BaseAgent):
                         "self.train_overlord(obs)",
                         "self.train_zergling(obs)",
                         "self.attack(obs)",
+                        "attack_expansion(obs",
                         "self.train_queen(obs)",
-                        "self.queen_inject(obs)"]
+                        "self.queen_inject(obs)",
+                        "build_vespene_extractor",
+                        "harvest_gas"]
 
         self.model_output_len = len(action_space)
 
@@ -122,7 +125,7 @@ class honoursAgent(base_agent.BaseAgent):
         if len(self.hatchery) > 0:
             self.main_base_left = (self.hatchery[0].x < 32)
 
-        self.update_state_mem(self.state)
+        self.update_state_mem(self.state, reward)
         self.old_state = self.state
 
         action = self.action_number_matcher(obs, action_index)
@@ -155,9 +158,15 @@ class honoursAgent(base_agent.BaseAgent):
         elif action_number == 5:
             return self.attack(obs)
         elif action_number == 6:
-            return self.train_queen(obs)
+            return self.attack_expansion(obs)
         elif action_number == 7:
+            return self.train_queen(obs)
+        elif action_number == 8:
             return self.queen_inject(obs)
+        elif action_number == 9:
+            return self.build_vespene_extractor(obs)
+        elif action_number == 10:
+            return self.harvest_gas(obs)
         else:
             raise Exception("Action scope error")
 
@@ -168,6 +177,10 @@ class honoursAgent(base_agent.BaseAgent):
         return [unit for unit in obs.observation.raw_units
                 if unit.unit_type == unit_type
                 and unit.alliance == features.PlayerRelative.SELF]
+
+    def get_units_by_type_neutral(self, obs, unit_type):
+        return [unit for unit in obs.observation.raw_units
+                if unit.unit_type == unit_type]
 
     # script taken from here https://gist.github.com/skjb/6764df2e1bba282730a893f38b8d449e#file-learning_agent_step1e-py
     def get_distances(self, obs, unit_list, target_xy):
@@ -221,7 +234,15 @@ class honoursAgent(base_agent.BaseAgent):
         if len(zerglings) > 0:
             target_location = (35, 42) if self.main_base_left else (22, 21)
             zerglings = [unit.tag for unit in zerglings]
-            return actions.RAW_FUNCTIONS.Attack_pt("now", zerglings, (target_location[0], target_location[1]))
+            return actions.RAW_FUNCTIONS.Attack_pt("queued", zerglings, (target_location[0], target_location[1]))
+        return actions.RAW_FUNCTIONS.no_op()
+
+    def attack_expansion(self, obs):
+        zerglings = self.get_units_by_type(obs, units.Zerg.Zergling)
+        if len(zerglings) > 0:
+            target_location = (15, 50) if self.main_base_left else (40, 15)
+            zerglings = [unit.tag for unit in zerglings]
+            return actions.RAW_FUNCTIONS.Attack_pt("queued", zerglings, (target_location[0], target_location[1]))
         return actions.RAW_FUNCTIONS.no_op()
 
 # use queue checks when multiple hatcheries are implemented
@@ -240,6 +261,37 @@ class honoursAgent(base_agent.BaseAgent):
                 return actions.RAW_FUNCTIONS.no_op()
         return actions.RAW_FUNCTIONS.no_op()
 
+    def build_vespene_extractor(self, obs):
+        if self.minerals > 25:
+            drones = self.get_units_by_type(obs, units.Zerg.Drone)
+            hatchery = self.get_units_by_type(obs, units.Zerg.Hatchery)
+            if len(drones) > 0 and len(hatchery) > 0:
+                geysers = self.get_units_by_type_neutral(obs, units.Neutral.VespeneGeyser)
+                
+                distance = self.get_distances(obs, geysers, (hatchery[0].x, hatchery[0].y))
+                extractors_num = len(self.get_units_by_type(obs,units.Zerg.Extractor))
+                geysers_sorted = np.sort(distance)
+                # adjust for extractors thazt could have already been made
+                if len(geysers_sorted) == extractors_num:
+                    return actions.RAW_FUNCTIONS.no_op()
+                target_geyser = geysers_sorted[extractors_num]
+                target_geyser = np.where(distance == target_geyser)
+                target_geyser = target_geyser[0][0]
+                geyser = geysers[target_geyser]
+                drone = self.select_builder(obs, drones, (geyser.x, geyser.y))
+                return actions.RAW_FUNCTIONS.Build_Extractor_unit("now", drone.tag, geyser.tag)
+        return actions.RAW_FUNCTIONS.no_op()
+
+    def harvest_gas(self,obs):
+        extractors = self.get_units_by_type(obs, units.Zerg.Extractor)
+        if len(extractors) > 1:
+            drones = self.get_units_by_type(obs, units.Zerg.Drone)
+            if len(drones) > 1:
+                extractor = random.choice(extractors)
+                drone = self.select_builder(obs,drones, (extractor.x, extractor.y))
+                return actions.RAW_FUNCTIONS.Harvest_Gather_unit("now", drone.tag, extractor.tag)
+        return actions.RAW_FUNCTIONS.no_op()
+
     def get_queen_energy_status(self, obs):
         queens = self.get_units_by_type(obs, units.Zerg.Queen)
         if len(queens) > 0:
@@ -251,8 +303,9 @@ class honoursAgent(base_agent.BaseAgent):
 
     def civil_war(self, obs):
         hatchery = self.get_units_by_type(obs, units.Zerg.Hatchery)
-        spawning_pool = self.get_units_by_type(obs,units.Zerg.SpawningPool)
-        if len(hatchery) > 0 or len(spawning_pool) > 0:
+        spawning_pool = self.get_units_by_type(obs, units.Zerg.SpawningPool)
+        extractor = self.get_units_by_type(obs, units.Zerg.Extractor)
+        if len(hatchery) > 0 or len(spawning_pool) > 0 or len(extractor) > 0:
             drones = self.get_units_by_type(obs, units.Zerg.Drone)
             queens = self.get_units_by_type(obs, units.Zerg.Queen)
             queen_tags = [unit.tag for unit in queens]
@@ -265,8 +318,10 @@ class honoursAgent(base_agent.BaseAgent):
                 return actions.RAW_FUNCTIONS.no_op()
             if len(hatchery) > 0:
                 return actions.RAW_FUNCTIONS.Attack_unit("now", attacker_tags, hatchery[0].tag)
-            else:
+            elif len(spawning_pool) > 0:
                 return actions.RAW_FUNCTIONS.Attack_unit("now", attacker_tags, spawning_pool[0].tag)
+            else:
+                return actions.RAW_FUNCTIONS.Attack_unit("queued", attacker_tags, extractor[0].tag)
         return actions.RAW_FUNCTIONS.no_op()
 
     def build_state(self, obs):
@@ -309,8 +364,13 @@ class honoursAgent(base_agent.BaseAgent):
             return penalty
         return 0
 
-    def update_state_mem(self, state):
+    def update_state_mem(self, state, reward):
         self.stored_states.append(state)
+        # 160 is the longest posible action for zerg
+        if len(self.stored_states) >= 160:
+            past_state_index = len(self.stored_states) - 160
+            # reward has the 4th position in the state list
+            self.stored_states[past_state_index][3] = reward
 
     def create_model(self):
         # create NN model
