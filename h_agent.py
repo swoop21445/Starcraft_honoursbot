@@ -1,6 +1,9 @@
 from pysc2.agents import base_agent
 from pysc2.lib import actions, features, units
 
+from sklearn.naive_bayes import MultinomialNB
+from joblib import dump, load
+
 import numpy as np
 import random
 import time
@@ -21,7 +24,7 @@ max_stored_states = 50_000
 min_stored_states = 1000  # changed for test ease 10000 = normal
 minibatch_size = 50
 update_value = 1  # changed for testing ease 5 = normal
-model_name = "extractors"
+model_name = "must_features_complete"
 terminate_value = 20_000
 
 
@@ -46,9 +49,11 @@ class honoursAgent(base_agent.BaseAgent):
                      "larva_count",
                      "queens_count",
                      "queen_energy",
-                     "game_loops "]
+                     "game_loops ",
+                     "predicted_enemy_strategy"]
 
-        self.nn_input_shape = len(state_len)
+        ## 1961 added for self unit data
+        self.nn_input_shape = len(state_len) + 1961
 
         action_space = ["self.no_op(obs)",
                         "self.train_drone(obs)",
@@ -60,7 +65,9 @@ class honoursAgent(base_agent.BaseAgent):
                         "self.train_queen(obs)",
                         "self.queen_inject(obs)",
                         "build_vespene_extractor",
-                        "harvest_gas"]
+                        "harvest_gas",
+                        "ovy_scout_main",
+                        "ovy_scout_expansion"]
 
         self.model_output_len = len(action_space)
 
@@ -77,6 +84,7 @@ class honoursAgent(base_agent.BaseAgent):
         # for speed of training epsilon decay is reduced should be 0.9999975
         self.epsilon_decay = 0.9999975
         self.discount = 0.99
+        self.bayes_model = load('bayes_model.jotlib')
 
     def reset(self):
         super(honoursAgent, self).reset()
@@ -99,8 +107,10 @@ class honoursAgent(base_agent.BaseAgent):
 
         self.build_state(obs)
         reward = obs.observation.score_cumulative[0]
+        
         # remove in full release
         self.reward_debug = reward
+
         units_map = self.populate_map(obs)
         numerical_state = self.build_state(obs)
 
@@ -167,6 +177,10 @@ class honoursAgent(base_agent.BaseAgent):
             return self.build_vespene_extractor(obs)
         elif action_number == 10:
             return self.harvest_gas(obs)
+        elif action_number == 11:
+            return self.ovy_scout_main(obs)
+        elif action_number == 12:
+            return self.ovy_scout_expansion(obs)
         else:
             raise Exception("Action scope error")
 
@@ -193,10 +207,16 @@ class honoursAgent(base_agent.BaseAgent):
             larva = random.choice(larva)
         return larva
 
-    def select_builder(self, obs, drones, location):
-        distance_to_target = self.get_distances(obs, drones, location)
-        drone = drones[np.argmin(distance_to_target)]
-        return drone
+    def select_ovy(self,obs):
+        ovy = self.get_units_by_type(obs, units.Zerg.Overlord)
+        if len(ovy) > 0:
+            ovy = random.choice(ovy)
+        return ovy
+
+    def select_closest_unit(self, obs, units, location):
+        distance_to_target = self.get_distances(obs, units, location)
+        unit = units[np.argmin(distance_to_target)]
+        return unit
 
     def train_overlord(self, obs):
         if self.minerals >= 100:
@@ -217,7 +237,7 @@ class honoursAgent(base_agent.BaseAgent):
             target_location = (22, 21) if self.main_base_left else (35, 42)
             drones = self.get_units_by_type(obs, units.Zerg.Drone)
             if len(drones) > 0:
-                drone = self.select_builder(obs, drones, target_location)
+                drone = self.select_closest_unit(obs, drones, target_location)
                 return actions.RAW_FUNCTIONS.Build_SpawningPool_pt("now", drone.tag, target_location)
         return actions.RAW_FUNCTIONS.no_op()
 
@@ -278,7 +298,7 @@ class honoursAgent(base_agent.BaseAgent):
                 target_geyser = np.where(distance == target_geyser)
                 target_geyser = target_geyser[0][0]
                 geyser = geysers[target_geyser]
-                drone = self.select_builder(obs, drones, (geyser.x, geyser.y))
+                drone = self.select_closest_unit(obs, drones, (geyser.x, geyser.y))
                 return actions.RAW_FUNCTIONS.Build_Extractor_unit("now", drone.tag, geyser.tag)
         return actions.RAW_FUNCTIONS.no_op()
 
@@ -288,7 +308,7 @@ class honoursAgent(base_agent.BaseAgent):
             drones = self.get_units_by_type(obs, units.Zerg.Drone)
             if len(drones) > 1:
                 extractor = random.choice(extractors)
-                drone = self.select_builder(obs,drones, (extractor.x, extractor.y))
+                drone = self.select_closest_unit(obs,drones, (extractor.x, extractor.y))
                 return actions.RAW_FUNCTIONS.Harvest_Gather_unit("now", drone.tag, extractor.tag)
         return actions.RAW_FUNCTIONS.no_op()
 
@@ -323,6 +343,23 @@ class honoursAgent(base_agent.BaseAgent):
             return actions.RAW_FUNCTIONS.Attack_unit("queued", attacker, target)
         return actions.RAW_FUNCTIONS.no_op()
 
+    def ovy_scout_main(self,obs):
+        target_location = (35, 42) if self.main_base_left else (22, 21)
+        overlords = self.get_units_by_type(obs,units.Zerg.Overlord)
+        if len(overlords) > 0:
+            overlord = self.select_closest_unit(obs,overlords,(target_location[0], target_location[1]))
+            return actions.RAW_FUNCTIONS.Attack_pt("queued", overlord, (target_location[0], target_location[1]))
+        return actions.RAW_FUNCTIONS.no_op()
+    
+    def ovy_scout_expansion(self,obs):
+        target_location = (15, 50) if self.main_base_left else (40, 15)
+        overlords = self.get_units_by_type(obs,units.Zerg.Overlord)
+        if len(overlords) > 0:
+            overlord = self.select_closest_unit(obs,overlords,(target_location[0], target_location[1]))
+            return actions.RAW_FUNCTIONS.Attack_pt("queued", overlord, (target_location[0], target_location[1]))
+        return actions.RAW_FUNCTIONS.no_op()
+
+
     def build_state(self, obs):
         self.minerals = obs.observation.player.minerals
         self.gas = obs.observation.player.vespene
@@ -335,8 +372,10 @@ class honoursAgent(base_agent.BaseAgent):
         self.queen_energy, self.queens_count, self.queen = self.get_queen_energy_status(
             obs)
         self.game_loops = obs.observation.game_loop
+        self.predicted_enemy_strategy = int(self.opponent_modelling(obs))
+        self.self_data = self.gather_self_data(obs)
         state = (float(self.minerals), float(self.gas), float(self.supply), float(self.supply_cap), float(
-            self.army_supply), float(self.worker_supply), float(self.idle_workers), float(self. larva_count), float(self.queens_count), float(self.queen_energy), float(self.game_loops))
+            self.army_supply), float(self.worker_supply), float(self.idle_workers), float(self. larva_count), float(self.queens_count), float(self.queen_energy), float(self.game_loops),float(self.predicted_enemy_strategy), *self.self_data)
         state = np.asarray(state)
         state = np.reshape(state, (1, self.nn_input_shape))
         return state
@@ -370,6 +409,38 @@ class honoursAgent(base_agent.BaseAgent):
             past_state_index = len(self.stored_states) - 160
             # reward has the 4th position in the state list
             self.stored_states[past_state_index][3] = reward
+
+    def opponent_modelling(self,obs):
+        enemy_data = self.gather_enemy_data(obs)
+        prediction = self.bayes_model.predict([enemy_data])
+        return prediction
+
+
+    def gather_enemy_data(self,obs):
+        enemy_state = [0]*1961
+        enemy_units = self.get_units_by_enemy(obs)
+        if len(enemy_units) != 0:
+            for unit in enemy_units:
+                unit_id = unit[0]
+                enemy_state[unit_id] += 1
+        return enemy_state
+
+    def gather_self_data(self, obs):
+        self_state = [0]*1961
+        self_units = self.get_units_by_self(obs)
+        if len(self_units) != 0:
+            for unit in self_units:
+                unit_id = unit[0]
+                self_state[unit_id] += 1
+        return self_state
+
+    def get_units_by_self(self, obs):
+        return [unit for unit in obs.observation.raw_units
+                if unit.alliance == features.PlayerRelative.SELF]
+        
+    def get_units_by_enemy(self, obs):
+        return [unit for unit in obs.observation.raw_units
+                if unit.alliance == features.PlayerRelative.ENEMY]
 
     def create_model(self):
         # create NN model
@@ -453,4 +524,4 @@ class honoursAgent(base_agent.BaseAgent):
             # callbacks = [self.tensorboard] removed
             self.model.fit(
                 x[index], y[index], batch_size=minibatch_size, verbose=0, shuffle=False)
-        ##self.model.save("models/" + model_name)
+        self.model.save("models/" + model_name)

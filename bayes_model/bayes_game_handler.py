@@ -17,14 +17,17 @@ def main():
       with sc2_env.SC2Env(
           map_name="Simple64",
           players=[sc2_env.Agent(sc2_env.Race.zerg),
-                   sc2_env.Bot(sc2_env.Race.random,
-                               sc2_env.Difficulty.very_easy)],
+                   sc2_env.Bot(sc2_env.Race.protoss,
+                               sc2_env.Difficulty.very_easy, sc2_env.BotBuild.power)],
           agent_interface_format=features.AgentInterfaceFormat(
               action_space=actions.ActionSpace.RAW,
               use_raw_units=True,
-              raw_resolution=64),
+              raw_resolution=64,),
           step_mul=16,
-          game_steps_per_episode=0,) as env:
+          disable_fog=True,
+          game_steps_per_episode=15000,
+          
+          ) as env:
           
         agent.setup(env.observation_spec(), env.action_spec())
         
