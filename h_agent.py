@@ -24,7 +24,7 @@ max_stored_states = 50_000
 min_stored_states = 1000  # changed for test ease 10000 = normal
 minibatch_size = 50
 update_value = 1  # changed for testing ease 5 = normal
-model_name = "must_features_complete"
+model_name = "gas_exploit_fix"
 terminate_value = 20_000
 
 
@@ -67,7 +67,10 @@ class honoursAgent(base_agent.BaseAgent):
                         "build_vespene_extractor",
                         "harvest_gas",
                         "ovy_scout_main",
-                        "ovy_scout_expansion"]
+                        "build_warren",
+                        ##"ovy_scout_expansion"
+                        "train_roach"
+                        ]
 
         self.model_output_len = len(action_space)
 
@@ -90,6 +93,9 @@ class honoursAgent(base_agent.BaseAgent):
         super(honoursAgent, self).reset()
         self.main_base = []
         self.state = "begin"
+        self.scouted_main = False
+        self.scouted_expansion = False
+        self.gas_drones = 0
 
         self.target_update_counter += 1
         if self.numb_game != 0:
@@ -140,8 +146,6 @@ class honoursAgent(base_agent.BaseAgent):
 
         action = self.action_number_matcher(obs, action_index)
 
-        if self.game_loops > terminate_value:
-            action = self.civil_war(obs)
 
         return action
 
@@ -180,7 +184,9 @@ class honoursAgent(base_agent.BaseAgent):
         elif action_number == 11:
             return self.ovy_scout_main(obs)
         elif action_number == 12:
-            return self.ovy_scout_expansion(obs)
+            return self.build_warren(obs)
+        elif action_number == 13:
+            return self.train_roach(obs)
         else:
             raise Exception("Action scope error")
 
@@ -241,6 +247,24 @@ class honoursAgent(base_agent.BaseAgent):
                 return actions.RAW_FUNCTIONS.Build_SpawningPool_pt("now", drone.tag, target_location)
         return actions.RAW_FUNCTIONS.no_op()
 
+    def build_warren(self, obs):
+        if self.minerals >= 150:
+            target_location = (22, 25) if self.main_base_left else (35, 46)
+            drones = self.get_units_by_type(obs, units.Zerg.Drone)
+            if len(drones) > 0:
+                drone = self.select_closest_unit(obs, drones, target_location)
+                return actions.RAW_FUNCTIONS.Build_RoachWarren_pt("now", drone.tag, target_location)
+        return actions.RAW_FUNCTIONS.no_op()
+
+    def train_roach(self, obs):
+        if self.minerals >= 75 and self.gas >= 25:
+            if len(self.get_units_by_type(obs, units.Zerg.RoachWarren)) > 0:
+                larva = self.select_larva(obs)
+                if len(larva) > 0:
+                    return actions.RAW_FUNCTIONS.Train_Roach_quick("now", larva.tag)
+        return actions.RAW_FUNCTIONS.no_op()
+
+
     def train_zergling(self, obs):
         if self.minerals >= 50:
             if len(self.get_units_by_type(obs, units.Zerg.SpawningPool)) > 0:
@@ -251,18 +275,24 @@ class honoursAgent(base_agent.BaseAgent):
 
     def attack(self, obs):
         zerglings = self.get_units_by_type(obs, units.Zerg.Zergling)
-        if len(zerglings) > 0:
-            target_location = (35, 42) if self.main_base_left else (22, 21)
+        roaches = self.get_units_by_type(obs, units.Zerg.Roach)
+        if len(zerglings) > 0 or len(roaches) > 0:
+            target_location = (40, 45) if self.main_base_left else (15, 20)
             zerglings = [unit.tag for unit in zerglings]
-            return actions.RAW_FUNCTIONS.Attack_pt("queued", zerglings, (target_location[0], target_location[1]))
+            roaches = [unit.tag for unit in roaches]
+            attackers = zerglings + roaches
+            return actions.RAW_FUNCTIONS.Attack_pt("queued", attackers, (target_location[0], target_location[1]))
         return actions.RAW_FUNCTIONS.no_op()
 
     def attack_expansion(self, obs):
         zerglings = self.get_units_by_type(obs, units.Zerg.Zergling)
+        roaches = self.get_units_by_type(obs, units.Zerg.Roach)
         if len(zerglings) > 0:
             target_location = (15, 50) if self.main_base_left else (40, 15)
             zerglings = [unit.tag for unit in zerglings]
-            return actions.RAW_FUNCTIONS.Attack_pt("queued", zerglings, (target_location[0], target_location[1]))
+            roaches = [unit.tag for unit in roaches]
+            attackers = zerglings + roaches
+            return actions.RAW_FUNCTIONS.Attack_pt("queued", attackers, (target_location[0], target_location[1]))
         return actions.RAW_FUNCTIONS.no_op()
 
 # use queue checks when multiple hatcheries are implemented
@@ -285,7 +315,8 @@ class honoursAgent(base_agent.BaseAgent):
         if self.minerals > 25:
             drones = self.get_units_by_type(obs, units.Zerg.Drone)
             hatchery = self.get_units_by_type(obs, units.Zerg.Hatchery)
-            if len(drones) > 0 and len(hatchery) > 0:
+            extractors = self.get_units_by_type(obs,units.Zerg.Extractor)
+            if len(drones) > 0 and len(hatchery) > 0 and len(extractors) < 2:
                 geysers = self.get_units_by_type_neutral(obs, units.Neutral.VespeneGeyser)
                 
                 distance = self.get_distances(obs, geysers, (hatchery[0].x, hatchery[0].y))
@@ -304,11 +335,12 @@ class honoursAgent(base_agent.BaseAgent):
 
     def harvest_gas(self,obs):
         extractors = self.get_units_by_type(obs, units.Zerg.Extractor)
-        if len(extractors) > 1:
+        if len(extractors) > 1 and self.gas_drones < 6:
             drones = self.get_units_by_type(obs, units.Zerg.Drone)
             if len(drones) > 1:
-                extractor = random.choice(extractors)
-                drone = self.select_closest_unit(obs,drones, (extractor.x, extractor.y))
+                drone = random.choice(drones)
+                extractor = self.select_closest_unit(obs,extractors, (drone.x, drone.y))
+                self.gas_drones += 1
                 return actions.RAW_FUNCTIONS.Harvest_Gather_unit("now", drone.tag, extractor.tag)
         return actions.RAW_FUNCTIONS.no_op()
 
@@ -346,18 +378,21 @@ class honoursAgent(base_agent.BaseAgent):
     def ovy_scout_main(self,obs):
         target_location = (35, 42) if self.main_base_left else (22, 21)
         overlords = self.get_units_by_type(obs,units.Zerg.Overlord)
-        if len(overlords) > 0:
+        if len(overlords) > 0 and self.scouted_main == False:
             overlord = self.select_closest_unit(obs,overlords,(target_location[0], target_location[1]))
-            return actions.RAW_FUNCTIONS.Attack_pt("queued", overlord, (target_location[0], target_location[1]))
+            self.scouted_main = True
+            return actions.RAW_FUNCTIONS.Move_pt("queued", overlord, (target_location[0], target_location[1]))
         return actions.RAW_FUNCTIONS.no_op()
     
-    def ovy_scout_expansion(self,obs):
-        target_location = (15, 50) if self.main_base_left else (40, 15)
-        overlords = self.get_units_by_type(obs,units.Zerg.Overlord)
-        if len(overlords) > 0:
-            overlord = self.select_closest_unit(obs,overlords,(target_location[0], target_location[1]))
-            return actions.RAW_FUNCTIONS.Attack_pt("queued", overlord, (target_location[0], target_location[1]))
-        return actions.RAW_FUNCTIONS.no_op()
+    
+    ##def ovy_scout_expansion(self,obs):
+        ##target_location = (15, 50) if self.main_base_left else (40, 15)
+        ##overlords = self.get_units_by_type(obs,units.Zerg.Overlord)
+        ##if len(overlords) > 0 and self.scouted_expansion == False:
+           ## overlord = self.select_closest_unit(obs,overlords,(target_location[0], target_location[1]))
+            ##self.scouted_expansion = True
+            ##return actions.RAW_FUNCTIONS.Move_pt("queued", overlord, (target_location[0], target_location[1]))
+        ##return actions.RAW_FUNCTIONS.no_op()
 
 
     def build_state(self, obs):

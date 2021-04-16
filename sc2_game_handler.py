@@ -24,7 +24,7 @@ def main():
               use_raw_units=True,
               raw_resolution=64),
           step_mul=16,
-          game_steps_per_episode=0,) as env:
+          game_steps_per_episode=15000,) as env:
           
         agent.setup(env.observation_spec(), env.action_spec())
         
