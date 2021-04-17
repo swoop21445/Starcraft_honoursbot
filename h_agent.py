@@ -9,6 +9,8 @@ import random
 import time
 from collections import deque
 from tqdm import tqdm
+import sys
+import csv
 
 
 import tensorflow as tf
@@ -24,8 +26,9 @@ max_stored_states = 50_000
 min_stored_states = 1000  # changed for test ease 10000 = normal
 minibatch_size = 50
 update_value = 1  # changed for testing ease 5 = normal
-model_name = "gas_exploit_fix"
-terminate_value = 20_000
+victory_incentive = 5000
+
+model_name = "final_model"
 
 
 class honoursAgent(base_agent.BaseAgent):
@@ -38,6 +41,9 @@ class honoursAgent(base_agent.BaseAgent):
         self.stored_states = deque(maxlen=max_stored_states)
         self.target_update_counter = -1
         self.numb_game = 0
+        self.game_result = "starting environment..."
+        self.random_actions = True
+        self.csv_filename = "game_data/model_vs_random_all_training.csv"
 
         state_len = ["minerals",
                      "gas",
@@ -85,7 +91,7 @@ class honoursAgent(base_agent.BaseAgent):
 
         self.epsilon = 0.99
         # for speed of training epsilon decay is reduced should be 0.9999975
-        self.epsilon_decay = 0.9999975
+        self.epsilon_decay = 0.9999975 if self.random_actions else 0
         self.discount = 0.99
         self.bayes_model = load('bayes_model.jotlib')
 
@@ -96,10 +102,14 @@ class honoursAgent(base_agent.BaseAgent):
         self.scouted_main = False
         self.scouted_expansion = False
         self.gas_drones = 0
+        print(self.game_result)
 
         self.target_update_counter += 1
         if self.numb_game != 0:
             print("Game reward = " + str(self.reward_debug))
+            with open(self.csv_filename,mode = 'a',newline='') as csv_file:
+                csv_writer = csv.writer(csv_file, delimiter=',')
+                csv_writer.writerow([self.game_result, self.reward_debug])
         self.numb_game += 1
         print("Game Number " + str(self.numb_game) + " Starting....")
 
@@ -107,9 +117,13 @@ class honoursAgent(base_agent.BaseAgent):
             self.target_model.set_weights(self.model.get_weights())
             self.target_update_counter = 0
         self.train()
+        if self.numb_game > 300:
+            sys.exit()
 
     def step(self, obs):
         super(honoursAgent, self).step(obs)
+
+        self.game_result = obs.reward
 
         self.build_state(obs)
         reward = obs.observation.score_cumulative[0]
@@ -353,27 +367,6 @@ class honoursAgent(base_agent.BaseAgent):
             return queen_energy, len(queens), queens[queen].tag
         return 0, 0, 0
 
-    def civil_war(self, obs):
-        hatchery = self.get_units_by_type(obs, units.Zerg.Hatchery)
-        spawning_pool = self.get_units_by_type(obs, units.Zerg.SpawningPool)
-        extractor = self.get_units_by_type(obs, units.Zerg.Extractor)
-        warren = self.get_units_by_type(obs, units.Zerg.RoachWarren)
-        buildings = hatchery + spawning_pool + extractor + warren
-        building_tags = [unit.tag for unit in buildings]
-        if len(buildings) > 0:
-            drones = self.get_units_by_type(obs, units.Zerg.Drone)
-            queens = self.get_units_by_type(obs, units.Zerg.Queen)
-            zerglings = self.get_units_by_type(obs, units.Zerg.Zergling)
-            roaches = self.get_units_by_type(obs, units.Zerg.Roach)
-            attackers = drones + queens + zerglings + roaches
-            if len(attackers) > 0:
-                attacker_tags = [unit.tag for unit in attackers]
-            else:
-                return actions.RAW_FUNCTIONS.no_op()
-            attacker = random.choice(attacker_tags)
-            target = random.choice(building_tags)
-            return actions.RAW_FUNCTIONS.Attack_unit("queued", attacker, target)
-        return actions.RAW_FUNCTIONS.no_op()
 
     def ovy_scout_main(self,obs):
         target_location = (35, 42) if self.main_base_left else (22, 21)
@@ -383,17 +376,6 @@ class honoursAgent(base_agent.BaseAgent):
             self.scouted_main = True
             return actions.RAW_FUNCTIONS.Move_pt("queued", overlord, (target_location[0], target_location[1]))
         return actions.RAW_FUNCTIONS.no_op()
-    
-    
-    ##def ovy_scout_expansion(self,obs):
-        ##target_location = (15, 50) if self.main_base_left else (40, 15)
-        ##overlords = self.get_units_by_type(obs,units.Zerg.Overlord)
-        ##if len(overlords) > 0 and self.scouted_expansion == False:
-           ## overlord = self.select_closest_unit(obs,overlords,(target_location[0], target_location[1]))
-            ##self.scouted_expansion = True
-            ##return actions.RAW_FUNCTIONS.Move_pt("queued", overlord, (target_location[0], target_location[1]))
-        ##return actions.RAW_FUNCTIONS.no_op()
-
 
     def build_state(self, obs):
         self.minerals = obs.observation.player.minerals
@@ -546,6 +528,8 @@ class honoursAgent(base_agent.BaseAgent):
 
         for index, (new_state, unit_map, action, reward, old_state) in enumerate(minibatch):
 
+            if self.reward == 1:
+                reward = reward + victory_incentive
             max_future_q = np.max(future_qs[index])
             new_q = reward + self.discount * max_future_q
 
