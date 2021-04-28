@@ -28,7 +28,7 @@ minibatch_size = 50
 update_value = 1  # changed for testing ease 5 = normal
 victory_incentive = 5000
 
-model_name = "final_model"
+model_name = "terran_model"
 
 
 class honoursAgent(base_agent.BaseAgent):
@@ -43,7 +43,7 @@ class honoursAgent(base_agent.BaseAgent):
         self.numb_game = 0
         self.game_result = "starting environment..."
         self.random_actions = True
-        self.csv_filename = "game_data/model_vs_random_all_training.csv"
+        self.csv_filename = "game_data/model_vs_terran_ve_training.csv"
 
         state_len = ["minerals",
                      "gas",
