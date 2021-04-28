@@ -28,7 +28,7 @@ minibatch_size = 50
 update_value = 1  # changed for testing ease 5 = normal
 victory_incentive = 5000
 
-model_name = "terran_model"
+model_name = "no_unit_data_terran_model"
 
 
 class honoursAgent(base_agent.BaseAgent):
@@ -43,7 +43,7 @@ class honoursAgent(base_agent.BaseAgent):
         self.numb_game = 0
         self.game_result = "starting environment..."
         self.random_actions = True
-        self.csv_filename = "game_data/model_vs_terran_ve_training.csv"
+        self.csv_filename = "game_data/no_unit_data_vs_terran_ve_training.csv"
 
         state_len = ["minerals",
                      "gas",
@@ -58,8 +58,8 @@ class honoursAgent(base_agent.BaseAgent):
                      "game_loops ",
                      "predicted_enemy_strategy"]
 
-        ## 1961 added for self unit data
-        self.nn_input_shape = len(state_len) + 1961
+        
+        self.nn_input_shape = len(state_len)
 
         action_space = ["self.no_op(obs)",
                         "self.train_drone(obs)",
@@ -390,9 +390,8 @@ class honoursAgent(base_agent.BaseAgent):
             obs)
         self.game_loops = obs.observation.game_loop
         self.predicted_enemy_strategy = int(self.opponent_modelling(obs))
-        self.self_data = self.gather_self_data(obs)
         state = (float(self.minerals), float(self.gas), float(self.supply), float(self.supply_cap), float(
-            self.army_supply), float(self.worker_supply), float(self.idle_workers), float(self. larva_count), float(self.queens_count), float(self.queen_energy), float(self.game_loops),float(self.predicted_enemy_strategy), *self.self_data)
+            self.army_supply), float(self.worker_supply), float(self.idle_workers), float(self. larva_count), float(self.queens_count), float(self.queen_energy), float(self.game_loops),float(self.predicted_enemy_strategy))
         state = np.asarray(state)
         state = np.reshape(state, (1, self.nn_input_shape))
         return state
