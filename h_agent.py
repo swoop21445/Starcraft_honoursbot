@@ -28,7 +28,7 @@ minibatch_size = 50
 update_value = 1  # changed for testing ease 5 = normal
 victory_incentive = 5000
 
-model_name = "no_unit_data_terran_model"
+model_name = "no_unit_data_zerg_model"
 
 
 class honoursAgent(base_agent.BaseAgent):
@@ -43,7 +43,7 @@ class honoursAgent(base_agent.BaseAgent):
         self.numb_game = 0
         self.game_result = "starting environment..."
         self.random_actions = True
-        self.csv_filename = "game_data/no_unit_data_vs_terran_ve_training.csv"
+        self.csv_filename = "game_data/no_unit_data_vs_zerg_ve_training.csv"
 
         state_len = ["minerals",
                      "gas",
@@ -117,7 +117,7 @@ class honoursAgent(base_agent.BaseAgent):
             self.target_model.set_weights(self.model.get_weights())
             self.target_update_counter = 0
         self.train()
-        if self.numb_game > 300:
+        if self.numb_game > 330:
             sys.exit()
 
     def step(self, obs):

@@ -2,9 +2,9 @@ import pandas as pd
 
 
 
-game_data_file = "game_data\model_vs_protoss_long_ve_training.csv"
-lenght = 1000
-output = 'vs_ve_protoss_1000_with_winrate.csv'
+game_data_file = "game_data/model_vs_medium_random_training.csv"
+lenght = 600
+output = 'model_vs_medium_random_score.csv'
 
 df = pd.read_csv(game_data_file)
 
@@ -27,6 +27,10 @@ for index,row in df.iterrows():
                     win_total += 1
         winrate = (win_total/winrate_counter) * 100
         winrates.append(winrate)
+
+for index,row in df.iterrows():
+    if row['game_result'] == 1:
+        row['game_score'] = int(row['game_score']) + 5000
 
 excess_rows = len(df.index) - lenght
 drop_list = []
